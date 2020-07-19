@@ -25,18 +25,14 @@ power.on()
 def when_pressed():
   led.blink(.2,.2)
 
-  os.system("sudo killall emulationstation")
-  os.system("sudo killall emulationstatio")	# RetroPie 4.6
-  os.system("sleep 5s")
+  os.system("sudo /home/pi/RetroPie/scripts/killes.sh")
   os.system("sudo poweroff")
 
 def when_released():
   led.on()
 
 def reboot():
-  os.system("sudo killall emulationstation")
-  os.system("sudo killall emulationstatio")	# RetroPie 4.6
-  os.system("sleep 5s")
+  os.system("sudo /home/pi/RetroPie/scripts/killes.sh")
   os.system("sudo reboot")
 
 
