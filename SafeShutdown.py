@@ -25,15 +25,26 @@ power.on()
 def when_pressed():
   led.blink(.2,.2)
 
-  os.system("sudo /home/pi/RetroPie/scripts/killes.sh")
-  os.system("sudo poweroff")
+  output = int(subprocess.check_output(['/home/pi/RetroPie/scripts/multi_switch.sh', '--es-pid']))
+
+  if output:
+    os.system("/home/pi/RetroPie/scripts/multi_switch.sh --es-poweroff")
+  else:
+    os.system("sudo poweroff")
 
 def when_released():
   led.on()
 
 def reboot():
-  os.system("sudo /home/pi/RetroPie/scripts/killes.sh")
-  os.system("sudo reboot")
+  output = int(subprocess.check_output(['/home/pi/RetroPie/scripts/multi_switch.sh', '--es-pid']))
+  output_rc = int(subprocess.check_output(['/home/pi/RetroPie/scripts/multi_switch.sh', '--rc-pid']))
+
+  if output_rc:
+    os.system("/home/pi/RetroPie/scripts/multi_switch.sh --es-closeemu")
+  elif output:
+    os.system("/home/pi/RetroPie/scripts/multi_switch.sh --es-restart")
+  else:
+    os.system("sudo reboot")
 
 
 btn = Button(powerPin, hold_time=hold)
