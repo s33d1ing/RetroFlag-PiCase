@@ -16,6 +16,14 @@
 # v0.80 Introduced --ES-SYSTEMD parameter, now the ES gracefully shutdown service by @meleu can be used
 # v0.85 Code cleanup, added watchdog to kill only persistent emulators with sig -9, added more helppages
 
+#
+# Additions by Garrett Dees
+#
+# If power button is switched back on before shutdown, cancel shutdown
+# Added two blinks when the reset button is pressed, if the reset button is still pressed after the blinks, reboot the Pi
+# Added regular reboot if ES isnt running
+#
+
 # Up to now 5 devices are supported!
 #
 # NESPIcase! Install raspi-gpio via "sudo apt install raspi-gpio", no sudo needed, reset, poweroff
@@ -317,37 +325,64 @@ function NESPiPlus() {
     raspi-gpio set $GPIO_poweronctrl op pn dh
     raspi-gpio set $GPIO_lediodectrl op dh
 
-    until [[ $power == 0 ]]; do
+    while true; do
+        until [[ $power == 0 ]]; do
+            power=$(raspi-gpio get $GPIO_powerswitch | grep -c "level=1 fsel=0 func=INPUT")
+            reset=$(raspi-gpio get $GPIO_resetswitch | grep -c "level=1 fsel=0 func=INPUT")
+
+            if [[ $reset == 0 ]]; then
+                RC_PID=$(check_emurun)    #* Set $RC_PID to the PID of running emulator (if present)
+
+                # Flashes LED 2 Times on Reset
+                for iteration in 1 2; do
+                    raspi-gpio set $GPIO_lediodectrl op dl
+                    sleep 0.25
+                    raspi-gpio set $GPIO_lediodectrl op dh
+                    sleep 0.25
+                done
+
+                # Check state of reset button, if it is still pressed, initiate reboot
+                reset=$(raspi-gpio get $GPIO_resetswitch | grep -c "level=1 fsel=0 func=INPUT")
+
+                if [[ $reset == 0 ]]; then
+                    es_action --ES-CLOSEEMU    #* Close running emulators (if present)
+                    es_action --ES-REBOOT      #* Restart (using EmulationStation method)
+
+                    # If ES isn't running use regular reboot
+                    sudo reboot
+                else
+                    [[ -z $RC_PID ]] && es_action --ES-RESTART     #* If $RC_PID is NULL, restart EmulationStation
+                    [[ -n $RC_PID ]] && es_action --ES-CLOSEEMU    #* If $RC_PID is not NULL, close running emulator
+                fi
+            fi
+
+            sleep 1
+        done
+
+        # Flashes LED 4 Times on PowerOff
+        for iteration in 1 2 3 4; do
+            raspi-gpio set $GPIO_lediodectrl op dl
+            sleep 0.25
+            raspi-gpio set $GPIO_lediodectrl op dh
+            sleep 0.25
+        done
+
+        # Check state of power button, if it is still pressed, initiate shutdown
         power=$(raspi-gpio get $GPIO_powerswitch | grep -c "level=1 fsel=0 func=INPUT")
-        reset=$(raspi-gpio get $GPIO_resetswitch | grep -c "level=1 fsel=0 func=INPUT")
 
-        if [[ $reset == 0 ]]; then
-            RC_PID=$(check_emurun)
-            [[ -z $RC_PID ]] && es_action --ES-RESTART
-            [[ -n $RC_PID ]] && es_action --ES-CLOSEEMU
+        if [[ $power == 0 ]]; then
+            # PowerOff LED
+            # Poweroff PowerCtrl needs script placed to /lib/systemd/system-shutdown/
+            raspi-gpio set $GPIO_lediodectrl op dl
+
+            # Initiate Shutdown per ES
+            es_action --ES-CLOSEEMU    #* Close running emulators (if present)
+            es_action --ES-POWEROFF    #* Shutdown (using EmulationStation method)
+
+            # If ES isn't running use regular shutoff
+            sudo poweroff
         fi
-
-        sleep 1
     done
-
-    # Flashes LED 4 Times on PowerOff
-    for iteration in 1 2 3 4; do
-        raspi-gpio set $GPIO_lediodectrl op dl
-        sleep 0.25
-        raspi-gpio set $GPIO_lediodectrl op dh
-        sleep 0.25
-    done
-
-    # PowerOff LED
-    # Poweroff PowerCtrl needs script placed to /lib/systemd/system-shutdown/
-    raspi-gpio set $GPIO_lediodectrl op dl
-
-    # Initiate Shutdown per ES
-    es_action --ES-CLOSEEMU
-    es_action --ES-POWEROFF
-
-    # If ES isn't running use regular shutoff
-    sudo poweroff
 
 }
 
@@ -581,7 +616,7 @@ case "$CASE_SEL" in
         # PowerSwitch GPIO 3 (I2C, SCL), input, set pullup resistor!
         # PowerOnControl GPIO 4 (BCM 4), output, high, fan control!
         # LEDiodeControl GPIO 14 (BCM 14,TxD ), output, high, low (flash LED)
-	# You will loose I2C function due connections using SDA und SCL
+        # You will loose I2C function due connections using SDA und SCL
         # Enter other BCM-connections to change behaviour
         #
         pack_check raspi-gpio
